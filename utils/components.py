@@ -1,4 +1,5 @@
 """Shared UI components for Vinyl Neo."""
+import html
 import streamlit as st
 
 
@@ -95,16 +96,20 @@ def render_rec_card(
     if preview_str and preview_str.startswith("http"):
         st.audio(preview_str)
 
-    # Ensure external_url is a valid URL string (avoid st.link_button compatibility issues)
-    url_str = str(external_url).strip() if external_url is not None else ""
-    if url_str and url_str.startswith("http") and "nan" not in url_str.lower():
-        st.markdown(
-            f'<a href="{url_str}" target="_blank" rel="noopener noreferrer" '
-            'style="display:inline-block;padding:0.5rem 1rem;background:#2c1810;color:#c4a574;'
-            'border:1px solid #4a3728;border-radius:8px;text-decoration:none;margin-top:0.5rem;">'
-            "Open in Spotify</a>",
-            unsafe_allow_html=True,
-        )
+    # Open in Spotify link - wrapped in try/except for compatibility
+    try:
+        url_str = str(external_url).strip() if external_url is not None else ""
+        if url_str and url_str.startswith("http") and "nan" not in url_str.lower():
+            safe_url = html.escape(url_str, quote=True)
+            st.markdown(
+                f'<a href="{safe_url}" target="_blank" rel="noopener noreferrer" '
+                'style="display:inline-block;padding:0.5rem 1rem;background:#2c1810;color:#c4a574;'
+                'border:1px solid #4a3728;border-radius:8px;text-decoration:none;margin-top:0.5rem;">'
+                "Open in Spotify</a>",
+                unsafe_allow_html=True,
+            )
+    except Exception:
+        pass
 
     if show_actions and (on_prev is not None or on_next is not None or on_like is not None or on_add_playlist is not None):
         c1, c2, c3, c4 = st.columns(4)
