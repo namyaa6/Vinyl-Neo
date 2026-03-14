@@ -44,7 +44,8 @@ st.markdown("""
     .btn-card .btn-title { font-size: 1.35rem !important; font-weight: 700 !important; letter-spacing: 0.5px !important; margin-bottom: 0.25rem !important; }
     .btn-card .btn-desc { font-size: 0.95rem !important; font-weight: 500 !important; color: #c4a574 !important; opacity: 0.9 !important; }
     section.main .block-container .stButton { width: 100%; }
-    section.main .stButton > button { width: 100% !important; min-height: 120px !important; white-space: normal !important;
+    .stButton > button { white-space: pre-line !important; }
+    section.main .stButton > button { width: 100% !important; min-height: 120px !important; white-space: pre-line !important;
         border-radius: 16px !important; background: #141010 !important; color: #f5e6d3 !important; border: 2px solid #2c1810 !important;
         font-size: 1.15rem !important; font-weight: bold !important; padding: 1.25rem 1rem !important;
         display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important;

@@ -2,10 +2,24 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+
+def _get_spotify_creds(key: str) -> str:
+    """Read from st.secrets (Streamlit Cloud) or os.environ (local .env)."""
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and st.secrets:
+            val = st.secrets.get(key, '')
+            if val:
+                return str(val)
+    except Exception:
+        pass
+    return os.getenv(key, '')
+
+
 class Config:
-    # Existing Spotify config...
-    SPOTIFY_CLIENT_ID = os.getenv('SPOTIFY_CLIENT_ID', '')
-    SPOTIFY_CLIENT_SECRET = os.getenv('SPOTIFY_CLIENT_SECRET', '')
+    # Uses st.secrets on Streamlit Cloud, else .env locally
+    SPOTIFY_CLIENT_ID = _get_spotify_creds('SPOTIFY_CLIENT_ID')
+    SPOTIFY_CLIENT_SECRET = _get_spotify_creds('SPOTIFY_CLIENT_SECRET')
     REDIRECT_URI = os.getenv('REDIRECT_URI', 'https://vinyl-neo.streamlit.app/')
 
     SPOTIFY_SCOPE = (
