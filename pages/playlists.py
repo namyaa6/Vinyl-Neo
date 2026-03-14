@@ -1,93 +1,151 @@
+"""Playlists, Liked Songs, and Remix (crossfade-style)."""
 import streamlit as st
 
 st.set_page_config(layout="wide", page_title="Playlists - Vinyl Neo")
 
-# Initialize session state
 if 'custom_playlists' not in st.session_state:
     st.session_state.custom_playlists = {}
 if 'liked_songs' not in st.session_state:
     st.session_state.liked_songs = []
+if 'playlist_queue' not in st.session_state:
+    st.session_state.playlist_queue = []
+if 'remix_tracks' not in st.session_state:
+    st.session_state.remix_tracks = []
+
+# Migrate old keys
+if 'mixtapes' in st.session_state and st.session_state.mixtapes:
+    st.session_state.custom_playlists = {**st.session_state.get('custom_playlists', {}), **st.session_state.mixtapes}
+    del st.session_state['mixtapes']
+if 'mixtape_queue' in st.session_state:
+    st.session_state.playlist_queue = st.session_state.mixtape_queue
+    del st.session_state['mixtape_queue']
 
 st.markdown("""
 <style>
-    .stApp {
-        background-color: #000000;
-        color: #ffffff;
-    }
-    
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    
-    .stButton > button {
-        background-color: #1a1a1a;
-        color: white;
-        border: 1px solid #333;
-        transition: all 0.3s;
-    }
-    
-    .stButton > button:hover {
-        background-color: #e74c3c;
-        border-color: #e74c3c;
-    }
+    .stApp { background-color: #0a0a0a; color: #f5e6d3; }
+    #MainMenu {visibility: hidden;} footer {visibility: hidden;}
+    .stButton > button { background: #2c1810; color: #c4a574; border: 1px solid #4a3728; }
+    .playlist-card { background: #141010; padding: 16px; border-radius: 12px; border: 1px solid #2c1810; margin: 8px 0; }
 </style>
 """, unsafe_allow_html=True)
 
-# Home button
-col_home, col_space = st.columns([1, 20])
-with col_home:
-    if st.button('🏠', key='home_btn'):
-        st.session_state.started = False
-        st.switch_page("app.py")
+if st.button('Back to menu', key='back_menu'):
+    st.session_state.started = True
+    st.switch_page("app.py")
 
-st.markdown('<h1 style="text-align: center; font-size: 3rem;">📚 MY PLAYLISTS</h1>', unsafe_allow_html=True)
+st.markdown('<h1 style="text-align: center; font-size: 2.5rem; color: #f5e6d3;">PLAYLISTS</h1>', unsafe_allow_html=True)
 
-# Create new playlist
-st.markdown('---')
-st.subheader('➕ Create New Playlist')
+tab_playlists, tab_liked, tab_remix = st.tabs(["Playlists", "Liked Songs", "Remix"])
 
-col1, col2 = st.columns([3, 1])
-with col1:
-    new_playlist_name = st.text_input('Playlist Name', placeholder='Enter playlist name...', label_visibility='collapsed')
-with col2:
-    if st.button('Create', use_container_width=True):
-        if new_playlist_name and new_playlist_name not in st.session_state.custom_playlists:
-            st.session_state.custom_playlists[new_playlist_name] = []
-            st.success(f'✅ Created playlist: {new_playlist_name}')
+with tab_playlists:
+    st.markdown('### Playlist queue')
+    if st.session_state.playlist_queue:
+        artists_seen = set()
+        unique = []
+        for t in st.session_state.playlist_queue:
+            artist = t.get('artist', t.get('artists', ''))
+            if artist not in artists_seen:
+                artists_seen.add(artist)
+                unique.append(t)
+        st.session_state.playlist_queue = unique[:12]
+
+        st.caption(f"{len(st.session_state.playlist_queue)} tracks in queue. Max one per artist.")
+        pl_name = st.text_input('Playlist title', placeholder='e.g. Late Night Vibes', key='pl_name')
+        pl_desc = st.text_input('Description (optional)', placeholder='Short description', key='pl_desc')
+        if st.button('Create playlist', key='create_pl'):
+            if pl_name and pl_name.strip():
+                st.session_state.custom_playlists[pl_name.strip()] = {
+                    'description': pl_desc or '',
+                    'tracks': list(st.session_state.playlist_queue),
+                }
+                st.session_state.playlist_queue = []
+                st.success(f'Created playlist: {pl_name}')
+                st.rerun()
+        if st.button('Clear queue', key='clear_queue'):
+            st.session_state.playlist_queue = []
             st.rerun()
+    else:
+        st.info('Add tracks from Search or Discover to build a playlist.')
 
-# Display Liked Songs
-st.markdown('---')
-st.markdown('### ❤️ Liked Songs')
+    st.markdown('### My playlists')
+    if st.session_state.custom_playlists:
+        for name, data in st.session_state.custom_playlists.items():
+            tracks = data.get('tracks', [])
+            with st.expander(f'{name} ({len(tracks)} tracks)'):
+                if data.get('description'):
+                    st.caption(data['description'])
+                for i, t in enumerate(tracks, 1):
+                    title = t.get('track_name', t.get('name', 'Unknown'))
+                    artist = t.get('artist', t.get('artists', ''))
+                    st.write(f"{i}. {title} — {artist}")
+                    if t.get('preview_url'):
+                        st.audio(t['preview_url'])
+                    if t.get('external_url'):
+                        st.link_button('Open in Spotify', url=t['external_url'], type='secondary', key=f'pl_spot_{name}_{i}')
+                if st.button(f'Delete playlist: {name}', key=f'del_pl_{name}'):
+                    del st.session_state.custom_playlists[name]
+                    st.rerun()
+    else:
+        st.info('No playlists yet.')
 
-if st.session_state.liked_songs:
-    for i, song in enumerate(st.session_state.liked_songs, 1):
-        col1, col2, col3 = st.columns([1, 5, 1])
-        with col1:
-            st.write(f"**{i}.**")
-        with col2:
-            st.write(f"**{song['name']}** - {song['artist']} ({song['genre']})")
-        with col3:
-            if st.button('🗑️', key=f'del_liked_{i}'):
-                st.session_state.liked_songs.pop(i-1)
+with tab_liked:
+    st.markdown('### Liked Songs')
+    if st.session_state.liked_songs:
+        for i, song in enumerate(st.session_state.liked_songs, 1):
+            name = song.get('name', 'Unknown')
+            artist = song.get('artist', '')
+            genre = song.get('genre', '')
+            st.write(f"**{name}** — {artist}" + (f" ({genre})" if genre else ""))
+            if song.get('preview_url'):
+                st.audio(song['preview_url'])
+            if song.get('external_url'):
+                st.link_button('Open in Spotify', url=song['external_url'], type='secondary', key=f'liked_spot_{i}')
+            if st.button('Remove', key=f'del_liked_{i}'):
+                st.session_state.liked_songs.pop(i - 1)
                 st.rerun()
-else:
-    st.info('No liked songs yet. Start searching and liking songs!')
+    else:
+        st.info('No liked songs yet. Like tracks from Search or Discover.')
 
-# Display Custom Playlists
-st.markdown('---')
-st.markdown('### 🎵 Custom Playlists')
+with tab_remix:
+    st.markdown('### Remix (3–4 tracks)')
+    st.caption('Pick 3–4 tracks to play in sequence. Uses Spotify 30s previews.')
+    pool = list(st.session_state.playlist_queue)
+    for s in st.session_state.liked_songs:
+        pool.append({
+            'name': s.get('name'),
+            'artist': s.get('artist'),
+            'genre': s.get('genre', ''),
+            'preview_url': s.get('preview_url'),
+            'external_url': s.get('external_url'),
+        })
+    for name, data in st.session_state.custom_playlists.items():
+        for t in data.get('tracks', []):
+            pool.append({
+                'name': t.get('track_name', t.get('name')),
+                'artist': t.get('artist', t.get('artists', '')),
+                'genre': t.get('genre', ''),
+                'preview_url': t.get('preview_url'),
+                'external_url': t.get('external_url'),
+            })
+    if pool:
+        labels = [f"{t.get('name', t.get('track_name', '?'))} — {t.get('artist', '')}" for t in pool]
+        sel = st.multiselect('Tracks for remix (pick 3–4)', range(len(pool)), format_func=lambda i: labels[i], max_selections=4, key='remix_sel')
+        if len(sel) >= 3 and st.button('Build remix', key='build_remix'):
+            st.session_state.remix_tracks = [pool[i] for i in sel]
+            st.rerun()
+    else:
+        st.info('Add liked songs or playlist tracks first.')
 
-if st.session_state.custom_playlists:
-    for playlist_name, songs in st.session_state.custom_playlists.items():
-        with st.expander(f'📚 {playlist_name} ({len(songs)} songs)'):
-            if songs:
-                for i, song in enumerate(songs, 1):
-                    st.write(f"{i}. {song}")
-            else:
-                st.info('No songs in this playlist yet.')
-            
-            if st.button(f'Delete Playlist', key=f'del_playlist_{playlist_name}'):
-                del st.session_state.custom_playlists[playlist_name]
-                st.rerun()
-else:
-    st.info('No custom playlists yet. Create one above!')
+    if st.session_state.remix_tracks:
+        st.markdown('**Your remix** (play in order)')
+        for i, t in enumerate(st.session_state.remix_tracks, 1):
+            title = t.get('name', t.get('track_name', 'Unknown'))
+            artist = t.get('artist', t.get('artists', ''))
+            st.markdown(f"**Segment {i}:** {title} — {artist}")
+            if t.get('preview_url'):
+                st.audio(t['preview_url'], key=f'remix_audio_{i}')
+            if t.get('external_url'):
+                st.link_button('Open in Spotify', url=t['external_url'], type='secondary', key=f'remix_spot_{i}')
+        if st.button('Clear remix', key='clear_remix'):
+            st.session_state.remix_tracks = []
+            st.rerun()

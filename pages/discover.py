@@ -1,12 +1,29 @@
+"""Discover: browse by genre and themed crates. Clickable vinyls, shared rec card."""
 import streamlit as st
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics.pairwise import cosine_similarity
-from services.lastfm_service import LastFMService
 
-lastfm = LastFMService()
+from utils.components import render_rec_card
 
 st.set_page_config(layout="wide", page_title="Discover - Vinyl Neo")
+
+GENRE_TO_SPOTIFY = {
+    'acoustic': 'acoustic', 'pop': 'pop', 'rock': 'rock', 'jazz': 'jazz',
+    'hip-hop': 'hip-hop', 'electronic': 'electronic', 'classical': 'classical',
+    'indie': 'indie', 'blues': 'blues', 'metal': 'metal', 'folk': 'folk',
+    'dance': 'dance',
+}
+
+# Themed crates (merged from crates.py)
+CRATES = [
+    {"id": "chill", "name": "Chill Lo-Fi", "genre_contains": "acoustic", "max_energy": 0.5},
+    {"id": "jazz", "name": "Late Night Jazz", "genre_contains": "jazz"},
+    {"id": "electronic", "name": "Electronic Dreams", "genre_contains": "electronic"},
+    {"id": "rock", "name": "90s Alt Rock", "genre_contains": "rock"},
+    {"id": "indie", "name": "Indie Picks", "genre_contains": "indie"},
+    {"id": "dance", "name": "Dance Floor", "genre_contains": "dance"},
+]
 
 @st.cache_data
 def load_data():
@@ -14,8 +31,8 @@ def load_data():
 
 @st.cache_resource
 def prepare_recommender(df):
-    feature_cols = ['danceability', 'energy', 'valence', 'acousticness', 
-                   'instrumentalness', 'speechiness']
+    feature_cols = ['danceability', 'energy', 'valence', 'acousticness',
+                    'instrumentalness', 'speechiness']
     feature_matrix = df[feature_cols].fillna(0)
     scaler = StandardScaler()
     return scaler.fit_transform(feature_matrix)
@@ -23,189 +40,200 @@ def prepare_recommender(df):
 df = load_data()
 feature_matrix = prepare_recommender(df)
 
-# Initialize session state
-if 'genre_recommendations' not in st.session_state:
-    st.session_state.genre_recommendations = []
-if 'current_genre_rec_index' not in st.session_state:
-    st.session_state.current_genre_rec_index = 0
+if 'discover_view' not in st.session_state:
+    st.session_state.discover_view = 'genres'  # 'genres' | 'results'
+if 'discover_recs' not in st.session_state:
+    st.session_state.discover_recs = []
+if 'discover_rec_index' not in st.session_state:
+    st.session_state.discover_rec_index = 0
+if 'discover_selection_name' not in st.session_state:
+    st.session_state.discover_selection_name = ''
+if 'liked_songs' not in st.session_state:
+    st.session_state.liked_songs = []
+if 'playlist_queue' not in st.session_state:
+    st.session_state.playlist_queue = []
+if 'custom_playlists' not in st.session_state:
+    st.session_state.custom_playlists = {}
 
-st.markdown("""
-<style>
-    .stApp {
-        background-color: #000000;
-        color: #ffffff;
-    }
-    
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    
-    .clickable-vinyl {
-        width: 220px;
-        height: 220px;
-        background: radial-gradient(circle, #1a1a1a 0%, #000 80%);
-        border-radius: 50%;
-        border: 3px solid #e74c3c;
-        margin: 0 auto 1rem;
-        position: relative;
-        cursor: pointer;
-        transition: transform 0.3s ease;
-    }
-    
-    .clickable-vinyl:hover {
-        transform: scale(1.15);
-        box-shadow: 0 0 40px rgba(231, 76, 60, 0.6);
-    }
-    
-    .clickable-vinyl::after {
-        content: '';
-        position: absolute;
-        width: 50px;
-        height: 50px;
-        background: #0a0a0a;
-        border: 2px solid #333;
-        border-radius: 50%;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-    }
-    
-    .genre-label {
-        text-align: center;
-        color: #ffffff;
-        font-size: 1.1rem;
-        font-weight: bold;
-        margin-bottom: 1rem;
-        text-transform: uppercase;
-    }
-    
-    .stButton > button {
-        background-color: transparent !important;
-        border: none !important;
-        padding: 0 !important;
-    }
-</style>
-""", unsafe_allow_html=True)
 
-# Home button
-col_home, col_space = st.columns([1, 20])
-with col_home:
-    if st.button('🏠', key='home_btn'):
-        st.session_state.started = False
-        st.switch_page("app.py")
-
-st.markdown('<h1 style="text-align: center; font-size: 3rem; margin-bottom: 1rem;">🎵 DISCOVER</h1>', unsafe_allow_html=True)
-st.markdown('<p style="text-align: center; color: #888; font-size: 1.2rem; margin-bottom: 3rem;">Explore music by genre</p>', unsafe_allow_html=True)
-
-# Famous genres with audio features
-genres = [
-    'acoustic', 'pop', 'rock', 'jazz',
-    'hip-hop', 'electronic', 'classical', 'indie',
-    'blues', 'metal', 'folk', 'dance'
-]
-
-# Function to get recommendations for genre
-def get_genre_recommendations(genre):
-    """Get genre recommendations from both local cosine similarity and Last.fm"""
-    
-    # 1. Local ML-based recommendations (your existing logic)
-    genre_songs = df[df['track_genre'].str.contains(genre, case=False, na=False)]
-    local_recs = []
-    
+def get_genre_recommendations(genre_key):
+    """Unified recs: local ML rows as dicts + Spotify recs. Returns list of rec dicts."""
+    recs = []
+    genre_songs = df[df['track_genre'].str.contains(genre_key, case=False, na=False)]
     if len(genre_songs) > 0:
         sample_idx = genre_songs.sample(1).index[0]
         song_features = feature_matrix[sample_idx].reshape(1, -1)
         similarities = cosine_similarity(song_features, feature_matrix)[0]
-        
-        similar_indices = similarities.argsort()[::-1]
-        
-        for idx in similar_indices:
-            if genre.lower() in df.iloc[idx]['track_genre'].lower():
-                local_recs.append(idx)
-                if len(local_recs) >= 20:
+        for idx in similarities.argsort()[::-1]:
+            row = df.iloc[idx]
+            if genre_key.lower() in str(row['track_genre']).lower():
+                recs.append({
+                    'track_name': row['track_name'],
+                    'artist': row['artists'],
+                    'genre': row['track_genre'],
+                    'source': 'local_ml',
+                    'track_id': row.get('track_id'),
+                })
+                if len(recs) >= 15:
                     break
-    
-    # 2. Last.fm genre/tag recommendations
-    lastfm_tracks_simple = []
     try:
-        lastfm_tracks = lastfm.get_top_tracks_by_tag(genre, limit=20)
-        for track in lastfm_tracks:
-            lastfm_tracks_simple.append({
-                'name': track['name'],
-                'artist': track['artist']['name'],
-                'source': 'lastfm'
-            })
+        from services.spotify_service import SpotifyService
+        spotify = SpotifyService()
+        spotify_seed = GENRE_TO_SPOTIFY.get(genre_key, genre_key)
+        if spotify._client_id:
+            tracks = spotify.get_recommendations_by_genres([spotify_seed], limit=15)
+            for t in tracks:
+                sim = SpotifyService.simplify_track(t)
+                recs.append({
+                    'track_name': sim['name'],
+                    'artist': sim['artist'],
+                    'genre': genre_key,
+                    'source': 'spotify',
+                    'preview_url': sim.get('preview_url'),
+                    'image_url': sim.get('image_url'),
+                    'external_url': sim.get('external_url'),
+                })
     except Exception:
-        # If Last.fm fails, just fall back to local
-        lastfm_tracks_simple = []
-    
-    # Return both: keep your existing index list for navigation,
-    # and optionally the Last.fm metadata if you want to show it later.
-    return local_recs, lastfm_tracks_simple
+        pass
+    return recs
 
-# Display genres in grid
-cols = st.columns(4)
-for i, genre in enumerate(genres):
-    with cols[i % 4]:
-        st.markdown(f'<div class="genre-label">{genre.upper()}</div>', unsafe_allow_html=True)
-        
-        # Vinyl disc as button
-        if st.button(f'vinyl_{genre}', key=f'btn_{genre}', use_container_width=True):
-            with st.spinner(f'Finding {genre} recommendations...'):
-                local_recs, lastfm_recs = get_genre_recommendations(genre)
-                if local_recs:
-                    st.session_state.genre_recommendations = local_recs
-                    st.session_state.current_genre_rec_index = 0
-                    st.session_state.selected_genre = genre
-                    # Optionally store Last.fm results for later display:
-                    st.session_state.lastfm_genre_recs = lastfm_recs
+
+def load_crate(crate_def):
+    """Load themed crate tracks from dataset."""
+    subset = df[df['track_genre'].str.contains(crate_def.get('genre_contains', ''), case=False, na=False)]
+    if 'max_energy' in crate_def:
+        subset = subset[subset['energy'] <= crate_def['max_energy']]
+    if len(subset) == 0:
+        return []
+    sample = subset.sample(min(20, len(subset)))
+    recs = []
+    for _, row in sample.iterrows():
+        recs.append({
+            'track_name': row['track_name'],
+            'artist': row['artists'],
+            'genre': row['track_genre'],
+            'source': 'local_ml',
+        })
+    return recs
+
+
+# Genre placeholder images (simple colored circles; can use Unsplash URLs later)
+GENRE_COLORS = {
+    'acoustic': '#8B7355', 'pop': '#E91E63', 'rock': '#9E9E9E', 'jazz': '#3F51B5',
+    'hip-hop': '#FF9800', 'electronic': '#9C27B0', 'classical': '#795548',
+    'indie': '#4CAF50', 'blues': '#2196F3', 'metal': '#424242', 'folk': '#8BC34A',
+    'dance': '#00BCD4',
+}
+
+st.markdown("""
+<style>
+    .stApp { background-color: #0a0a0a; color: #f5e6d3; }
+    #MainMenu {visibility: hidden;} footer {visibility: hidden;}
+    .vinyl-btn { width: 140px; height: 140px; border-radius: 50% !important; font-weight: bold !important;
+        text-transform: uppercase !important; margin: 0 auto 0.5rem !important; display: block !important;
+        border: 4px solid #2c1810 !important; color: #f5e6d3 !important; }
+    .genre-vinyl-grid .stButton > button { border-radius: 50% !important; width: 140px !important; height: 140px !important;
+        margin: 0 auto !important; display: block !important; background: radial-gradient(circle, #2a2520 0%, #1a1510 100%) !important;
+        border: 4px solid #2c1810 !important; color: #f5e6d3 !important; font-weight: bold !important; text-transform: uppercase !important; }
+    .genre-vinyl-grid .stButton > button:hover { border-color: #c4a574 !important; transform: scale(1.05); }
+    .rec-card { background: #141010; padding: 40px; border-radius: 25px; text-align: center; border: 1px solid #2c1810; margin-top: 1rem; }
+    .song-title { font-size: 1.8rem; font-weight: bold; margin-top: 16px; color: #f5e6d3; }
+    .song-meta { color: #c4a574; font-size: 1rem; margin-top: 8px; }
+    .stButton > button { background-color: #2c1810; color: #c4a574; border: 1px solid #4a3728; }
+    .stButton > button:hover { background-color: #4a3728; border-color: #c4a574; }
+</style>
+""", unsafe_allow_html=True)
+
+if st.button('Back to menu', key='back_menu'):
+    st.session_state.started = True
+    st.switch_page("app.py")
+
+if st.session_state.discover_view == 'results' and st.session_state.discover_recs:
+    # Results view: replace grid with rec at top + Back to genres
+    if st.button('← Back to genres', key='back_genres'):
+        st.session_state.discover_view = 'genres'
+        st.session_state.discover_recs = []
+        st.rerun()
+
+    st.markdown(f'<h2 style="text-align: center; color: #c4a574;">{st.session_state.discover_selection_name}</h2>', unsafe_allow_html=True)
+    recs = st.session_state.discover_recs
+    idx = min(st.session_state.discover_rec_index, len(recs) - 1)
+    st.session_state.discover_rec_index = idx
+    rec = recs[idx]
+
+    def on_prev():
+        if st.session_state.discover_rec_index > 0:
+            st.session_state.discover_rec_index -= 1
+            st.rerun()
+
+    def on_next():
+        if st.session_state.discover_rec_index < len(recs) - 1:
+            st.session_state.discover_rec_index += 1
+            st.rerun()
+
+    def on_like():
+        song_data = {
+            'name': rec.get('track_name', rec.get('name')),
+            'artist': rec.get('artist', rec.get('artists', '')),
+            'genre': rec.get('genre', ''),
+            'preview_url': rec.get('preview_url'),
+            'external_url': rec.get('external_url'),
+        }
+        if song_data not in st.session_state.liked_songs:
+            st.session_state.liked_songs.append(song_data)
+            st.success('Added to Liked Songs!')
+
+    def on_add():
+        st.session_state.playlist_queue.append(rec)
+        st.info('Added to playlist queue')
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        render_rec_card(
+            rec,
+            key_prefix='discover_rec',
+            show_actions=True,
+            on_prev=on_prev,
+            on_next=on_next,
+            on_like=on_like,
+            on_add_playlist=on_add,
+        )
+    st.caption(f'Track {idx + 1} of {len(recs)}')
+    st.stop()
+
+# Genres view
+st.markdown('<h1 style="text-align: center; font-size: 2.5rem; color: #f5e6d3;">DISCOVER</h1>', unsafe_allow_html=True)
+st.markdown('<p style="text-align: center; color: #888;">Click a genre or themed crate</p>', unsafe_allow_html=True)
+
+# Genre vinyls: the button is the clickable vinyl (styled round)
+st.markdown('<div class="genre-vinyl-grid">', unsafe_allow_html=True)
+genres = ['acoustic', 'pop', 'rock', 'jazz', 'hip-hop', 'electronic',
+          'classical', 'indie', 'blues', 'metal', 'folk', 'dance']
+
+for row_start in range(0, len(genres), 4):
+    cols = st.columns(4)
+    for i, genre in enumerate(genres[row_start:row_start + 4]):
+        with cols[i]:
+            if st.button(genre.upper(), key=f'genre_{genre}', use_container_width=True):
+                with st.spinner(f'Finding {genre} recommendations...'):
+                    recs = get_genre_recommendations(genre)
+                    st.session_state.discover_recs = recs
+                    st.session_state.discover_rec_index = 0
+                    st.session_state.discover_selection_name = f'{genre.upper()} — Recommendations'
+                    st.session_state.discover_view = 'results'
                     st.rerun()
+st.markdown('</div>', unsafe_allow_html=True)
 
-        
-        st.markdown(f'<div class="clickable-vinyl"></div>', unsafe_allow_html=True)
-
-# Display genre recommendations
-if st.session_state.genre_recommendations:
-    st.markdown('---')
-    st.markdown(f'<h2 style="text-align: center;">🎵 {st.session_state.selected_genre.upper()} RECOMMENDATIONS</h2>', unsafe_allow_html=True)
-    
-    idx = st.session_state.genre_recommendations[st.session_state.current_genre_rec_index]
-    rec = df.iloc[idx]
-    
-    col1, col_main, col3 = st.columns([1, 2, 1])
-    
-    with col_main:
-        st.markdown(f"""
-        <div style="background: #111111; padding: 40px; border-radius: 25px; text-align: center; border: 1px solid #222;">
-            <div style="width: 300px; height: 300px; border-radius: 50%; border: 10px solid #1a1a1a; 
-                 background: radial-gradient(circle, #1a1a1a 0%, #000000 70%, #1a1a1a 100%); 
-                 margin: 0 auto; position: relative;">
-                <div style="position: absolute; width: 80px; height: 80px; background: #e74c3c; 
-                     border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%);"></div>
-            </div>
-            <div style="font-size: 2rem; font-weight: bold; margin-top: 20px; color: #ffffff;">{rec['track_name']}</div>
-            <div style="color: #e74c3c; font-size: 1.1rem; margin-top: 10px;">{rec['artists']} • {rec['track_genre']}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown('<br>', unsafe_allow_html=True)
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("⬅️ Previous", use_container_width=True, key='genre_prev'):
-                if st.session_state.current_genre_rec_index > 0:
-                    st.session_state.current_genre_rec_index -= 1
-                    st.rerun()
-        with c2:
-            if st.button("Next ➡️", use_container_width=True, key='genre_next'):
-                if st.session_state.current_genre_rec_index < len(st.session_state.genre_recommendations) - 1:
-                    st.session_state.current_genre_rec_index += 1
-                    st.rerun()
-
-if 'lastfm_genre_recs' in st.session_state and st.session_state.lastfm_genre_recs:
-    st.markdown('---')
-    st.markdown(
-        f'<h3 style="text-align: center; color: #888;">More {st.session_state.selected_genre.upper()} from Last.fm</h3>',
-        unsafe_allow_html=True
-    )
-    for t in st.session_state.lastfm_genre_recs[:10]:
-        st.write(f"- {t['name']} — {t['artist']} (Last.fm)")
+st.markdown('---')
+st.markdown('<h3 style="color: #c4a574;">Themed Crates</h3>', unsafe_allow_html=True)
+crate_cols = st.columns(min(3, len(CRATES)))
+for i, crate in enumerate(CRATES):
+    with crate_cols[i % 3]:
+        if st.button(crate['name'], key=f"crate_{crate['id']}", use_container_width=True):
+            with st.spinner(f"Loading {crate['name']}..."):
+                recs = load_crate(crate)
+                st.session_state.discover_recs = recs
+                st.session_state.discover_rec_index = 0
+                st.session_state.discover_selection_name = crate['name']
+                st.session_state.discover_view = 'results'
+                st.rerun()

@@ -1,54 +1,44 @@
 import streamlit as st
 
-st.set_page_config(layout="wide", page_title="About - Vinyl")
+st.set_page_config(layout="wide", page_title="About - Vinyl Neo")
 
 st.markdown("""
 <style>
-    .stApp {
-        background-color: #000000;
-        color: #ffffff;
-    }
-    
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
+    .stApp { background-color: #0a0a0a; color: #f5e6d3; }
+    #MainMenu {visibility: hidden;} footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<h1 style="text-align: center; font-size: 3rem;">ℹ️ ABOUT VINYL</h1>', unsafe_allow_html=True)
+st.markdown('<h1 style="text-align: center; font-size: 2.5rem; color: #f5e6d3;">ABOUT VINYL NEO</h1>', unsafe_allow_html=True)
 st.markdown('<br>', unsafe_allow_html=True)
 
 col1, col2, col3 = st.columns([1, 2, 1])
-
 with col2:
     st.markdown("""
     ### About This Project
-    
-    VINYL is an AI-powered music recommendation system that combines:
-    
-    - **Neural Networks** for predicting user preferences
-    - **Content-Based Filtering** for finding similar songs
-    - **Hybrid Approach** for best recommendations
-    
-    ### Features
-    
-    - 🔍 Smart search by song name or artist
-    - 🎵 AI-powered recommendations
-    - 📚 Playlist management
-    - 🌟 Genre discovery
-    - ❤️ Like and save favorite songs
-    
+
+    **Vinyl Neo** is an AI-powered music discovery tool with an analog soul. Unlike generic streaming apps, it leans into vinyl-inspired UX and explainable ML.
+
+    - **Content-based filtering** (cosine similarity on audio features)
+    - **Spotify integration** for recommendations and 30s previews
+    - **Side A / Side B** – similar picks vs. exploration
+    - **Discover** – browse by genre and themed crates
+    - **Mood-based** recommendations with contrast (match mood, shift brighter, lean in)
+    - **Feature playground** – tune energy, valence, danceability
+    - **Playlists** and **Liked Songs** with previews and Open in Spotify
+    - **Remix** – sequence 3–4 tracks with preview players
+
     ### Built With
-    
-    - Python
-    - TensorFlow & scikit-learn
-    - Streamlit
-    - 114,000+ songs dataset
-    
+
+    - Python, Streamlit, scikit-learn
+    - Spotify Web API
+    - 114,000+ track dataset
+
     ---
-    
-    **Developed as a machine learning project** showcasing neural networks and recommendation systems.
+    Developed as a music lab and recommendation system.
     """)
 
-st.markdown('<br><br>', unsafe_allow_html=True)
-if st.button('🏠 Back to Home'):
+st.markdown('<br>', unsafe_allow_html=True)
+if st.button('Back to menu'):
+    st.session_state.started = True
     st.switch_page("app.py")

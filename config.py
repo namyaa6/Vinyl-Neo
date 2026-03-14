@@ -6,11 +6,8 @@ class Config:
     # Existing Spotify config...
     SPOTIFY_CLIENT_ID = os.getenv('SPOTIFY_CLIENT_ID', '')
     SPOTIFY_CLIENT_SECRET = os.getenv('SPOTIFY_CLIENT_SECRET', '')
-    
-    # Last.fm config
-    LASTFM_API_KEY = os.getenv('LASTFM_API_KEY', '')
-    LASTFM_API_SECRET = os.getenv('LASTFM_API_SECRET', '')
-    
+    REDIRECT_URI = os.getenv('REDIRECT_URI', 'https://vinyl-neo.streamlit.app/')
+
     SPOTIFY_SCOPE = (
         'user-library-read '
         'user-top-read '

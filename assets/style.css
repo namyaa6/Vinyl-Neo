@@ -1,0 +1,144 @@
+/* Vinyl Neo - Dark Vintage Vinyl Theme */
+:root {
+  --vinyl-bg: #0a0a0a;
+  --vinyl-card: #141010;
+  --vinyl-accent: #c4a574;
+  --vinyl-text: #f5e6d3;
+  --vinyl-border: #2c1810;
+  --vinyl-muted: #888;
+}
+
+.stApp {
+  background-color: var(--vinyl-bg);
+  color: var(--vinyl-text);
+}
+
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+
+.vinyl-container {
+  position: fixed;
+  right: -15%;
+  top: 10%;
+  z-index: 0;
+}
+
+.vinyl {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, #1a1a1a 0%, #000 70%, #1a1a1a 100%);
+  border-radius: 50%;
+  border: 2px solid var(--vinyl-border);
+  box-shadow: 0 0 50px rgba(0,0,0,0.9);
+  animation: vinyl-spin 10s linear infinite;
+  position: relative;
+}
+
+.vinyl::before {
+  content: '';
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  background: var(--vinyl-accent);
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 20px rgba(196,165,116,0.5);
+}
+
+.vinyl::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  border-radius: 50%;
+  background: repeating-radial-gradient(circle, transparent 0, transparent 5px, rgba(255,255,255,0.03) 6px);
+}
+
+@keyframes vinyl-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.feature-card {
+  background: var(--vinyl-card);
+  padding: 1rem;
+  border-radius: 15px;
+  border: 1px solid var(--vinyl-border);
+  text-align: center;
+  transition: all 0.3s;
+  cursor: pointer;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.feature-card:hover {
+  border-color: var(--vinyl-accent);
+  transform: translateY(-5px);
+  background: #1a1510;
+}
+
+.rec-card {
+  background: var(--vinyl-card);
+  padding: 40px;
+  border-radius: 25px;
+  text-align: center;
+  border: 1px solid var(--vinyl-border);
+  margin-top: 2rem;
+}
+
+.why-badge {
+  display: inline-block;
+  background: var(--vinyl-border);
+  color: var(--vinyl-accent);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  margin: 4px;
+}
+
+.stButton > button {
+  background-color: var(--vinyl-border) !important;
+  color: var(--vinyl-accent) !important;
+  border: 1px solid #4a3728 !important;
+}
+
+.stButton > button:hover {
+  background-color: #4a3728 !important;
+  border-color: var(--vinyl-accent) !important;
+}
+
+/* Shared rec card (album art, preview, Open in Spotify) */
+.rotating-album {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 8px solid var(--vinyl-border);
+  background: radial-gradient(circle, #1a1a1a 0%, #000 70%);
+  margin: 0 auto;
+  position: relative;
+}
+.rotating-album::after {
+  content: '';
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  background: var(--vinyl-accent);
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.song-title {
+  font-size: 1.8rem;
+  font-weight: bold;
+  margin-top: 16px;
+  color: var(--vinyl-text);
+}
+.song-meta {
+  color: var(--vinyl-accent);
+  font-size: 1rem;
+  margin-top: 8px;
+}
