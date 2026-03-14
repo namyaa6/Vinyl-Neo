@@ -2,6 +2,29 @@
 import streamlit as st
 
 
+@st.cache_data(ttl=3600)
+def enrich_rec_with_spotify(track_name: str, artist_name: str, track_id=None) -> dict | None:
+    """Fetch album art, preview, and external URL from Spotify. Returns dict or None."""
+    try:
+        from services.spotify_service import SpotifyService
+        spotify = SpotifyService()
+        if not spotify._client_id:
+            return None
+        q = f"{track_name} {artist_name}" if track_name and artist_name else str(track_name or artist_name)
+        items = spotify.search_track(q, limit=3)
+        for track in items:
+            sim = SpotifyService.simplify_track(track)
+            if sim.get("preview_url") or sim.get("image_url") or sim.get("external_url"):
+                return {
+                    "image_url": sim.get("image_url"),
+                    "preview_url": sim.get("preview_url"),
+                    "external_url": sim.get("external_url"),
+                }
+    except Exception:
+        pass
+    return None
+
+
 def _normalize_rec(rec):
     """Normalize rec dict to common keys for display."""
     return {
@@ -42,9 +65,10 @@ def render_rec_card(
     image_url = n["image_url"]
     external_url = n["external_url"]
 
-    if image_url:
+    img_url = str(image_url).strip() if image_url else ""
+    if img_url and img_url.startswith("http"):
         img_html = (
-            f'<img src="{image_url}" style="width: 200px; height: 200px; border-radius: 50%; '
+            f'<img src="{img_url}" style="width: 200px; height: 200px; border-radius: 50%; '
             'object-fit: cover; border: 6px solid #2c1810;">'
         )
     else:
@@ -67,11 +91,14 @@ def render_rec_card(
         unsafe_allow_html=True,
     )
 
-    if preview_url:
-        st.audio(preview_url)
+    preview_str = str(preview_url).strip() if preview_url is not None else ""
+    if preview_str and preview_str.startswith("http"):
+        st.audio(preview_str)
 
-    if external_url:
-        st.link_button("Open in Spotify", url=external_url, type="secondary", key=f"{key_prefix}_spotify")
+    # Ensure external_url is a valid non-empty string (can be numpy/pandas from DataFrames)
+    url_str = str(external_url).strip() if external_url is not None else ""
+    if url_str and url_str.startswith("http"):
+        st.link_button("Open in Spotify", url=url_str, type="secondary", key=f"{key_prefix}_spotify")
 
     if show_actions and (on_prev is not None or on_next is not None or on_like is not None or on_add_playlist is not None):
         c1, c2, c3, c4 = st.columns(4)
