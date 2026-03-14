@@ -95,10 +95,16 @@ def render_rec_card(
     if preview_str and preview_str.startswith("http"):
         st.audio(preview_str)
 
-    # Ensure external_url is a valid non-empty string (can be numpy/pandas from DataFrames)
+    # Ensure external_url is a valid URL string (avoid st.link_button compatibility issues)
     url_str = str(external_url).strip() if external_url is not None else ""
-    if url_str and url_str.startswith("http"):
-        st.link_button("Open in Spotify", url=url_str, type="secondary", key=f"{key_prefix}_spotify")
+    if url_str and url_str.startswith("http") and "nan" not in url_str.lower():
+        st.markdown(
+            f'<a href="{url_str}" target="_blank" rel="noopener noreferrer" '
+            'style="display:inline-block;padding:0.5rem 1rem;background:#2c1810;color:#c4a574;'
+            'border:1px solid #4a3728;border-radius:8px;text-decoration:none;margin-top:0.5rem;">'
+            "Open in Spotify</a>",
+            unsafe_allow_html=True,
+        )
 
     if show_actions and (on_prev is not None or on_next is not None or on_like is not None or on_add_playlist is not None):
         c1, c2, c3, c4 = st.columns(4)
