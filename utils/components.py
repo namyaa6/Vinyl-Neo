@@ -92,38 +92,42 @@ def render_rec_card(
         unsafe_allow_html=True,
     )
 
+    # 30s preview - play directly in app. Full track requires Spotify (Open in Spotify link below).
     preview_str = str(preview_url).strip() if preview_url is not None else ""
     if preview_str and preview_str.startswith("http"):
+        st.caption("▶ Play 30s preview in app")
         st.audio(preview_str)
 
-    # Open in Spotify link - wrapped in try/except for compatibility
-    try:
-        url_str = str(external_url).strip() if external_url is not None else ""
-        if url_str and url_str.startswith("http") and "nan" not in url_str.lower():
-            safe_url = html.escape(url_str, quote=True)
-            st.markdown(
-                f'<a href="{safe_url}" target="_blank" rel="noopener noreferrer" '
-                'style="display:inline-block;padding:0.5rem 1rem;background:#2c1810;color:#c4a574;'
-                'border:1px solid #4a3728;border-radius:8px;text-decoration:none;margin-top:0.5rem;">'
-                "Open in Spotify</a>",
-                unsafe_allow_html=True,
-            )
-    except Exception:
-        pass
-
+    # Action row: Prev | Like | Open in Spotify (center) | Add to Playlist | Next
     if show_actions and (on_prev is not None or on_next is not None or on_like is not None or on_add_playlist is not None):
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
-            if on_prev is not None and st.button("← Previous", key=f"{key_prefix}_prev", use_container_width=True):
+            if on_prev is not None and st.button("← Prev", key=f"{key_prefix}_prev", use_container_width=True):
                 on_prev()
         with c2:
             if on_like is not None and st.button("♥ Like", key=f"{key_prefix}_like", use_container_width=True):
                 on_like()
         with c3:
+            # Open in Spotify - centered
+            try:
+                url_str = str(external_url).strip() if external_url is not None else ""
+                if url_str and url_str.startswith("http") and "nan" not in url_str.lower():
+                    safe_url = html.escape(url_str, quote=True)
+                    st.markdown(
+                        f'<div style="display:flex;justify-content:center;align-items:center;">'
+                        f'<a href="{safe_url}" target="_blank" rel="noopener noreferrer" '
+                        'style="display:inline-block;padding:0.5rem 1rem;background:#2c1810;color:#c4a574;'
+                        'border:1px solid #4a3728;border-radius:8px;text-decoration:none;font-size:0.9rem;">'
+                        "Open in Spotify</a></div>",
+                        unsafe_allow_html=True,
+                    )
+            except Exception:
+                pass
+        with c4:
             if on_add_playlist is not None and st.button(
                 "Add to Playlist", key=f"{key_prefix}_add", use_container_width=True
             ):
                 on_add_playlist()
-        with c4:
+        with c5:
             if on_next is not None and st.button("Next →", key=f"{key_prefix}_next", use_container_width=True):
                 on_next()

@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 
-from utils.components import render_rec_card
+from utils.components import render_rec_card, enrich_rec_with_spotify
 
 st.set_page_config(layout="wide", page_title="Playground - Vinyl Neo")
 
@@ -152,6 +152,15 @@ if st.session_state.playground_recs:
     st.session_state.playground_index = idx
     rec = st.session_state.playground_recs[idx]
 
+    # Enrich local recs with Spotify album art, preview, link
+    rec_to_show = rec.copy()
+    if not rec_to_show.get("preview_url") and not rec_to_show.get("image_url"):
+        track_name = rec_to_show.get("track_name") or rec_to_show.get("name", "")
+        artist = rec_to_show.get("artist") or rec_to_show.get("artists", "")
+        en = enrich_rec_with_spotify(str(track_name), str(artist), rec_to_show.get("track_id"))
+        if en:
+            rec_to_show.update(en)
+
     def on_prev():
         if st.session_state.playground_index > 0:
             st.session_state.playground_index -= 1
@@ -164,22 +173,22 @@ if st.session_state.playground_recs:
 
     def on_like():
         song_data = {
-            'name': rec.get('track_name', rec.get('name')),
-            'artist': rec.get('artist', rec.get('artists', '')),
-            'genre': rec.get('genre', ''),
-            'preview_url': rec.get('preview_url'),
-            'external_url': rec.get('external_url'),
+            'name': rec_to_show.get('track_name', rec_to_show.get('name')),
+            'artist': rec_to_show.get('artist', rec_to_show.get('artists', '')),
+            'genre': rec_to_show.get('genre', ''),
+            'preview_url': rec_to_show.get('preview_url'),
+            'external_url': rec_to_show.get('external_url'),
         }
         if song_data not in st.session_state.liked_songs:
             st.session_state.liked_songs.append(song_data)
             st.success('Added to Liked Songs!')
 
     def on_add():
-        st.session_state.playlist_queue.append(rec)
+        st.session_state.playlist_queue.append(rec_to_show)
         st.info('Added to playlist queue')
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        render_rec_card(rec, key_prefix='pg_rec', show_actions=True,
+        render_rec_card(rec_to_show, key_prefix='pg_rec', show_actions=True,
                         on_prev=on_prev, on_next=on_next, on_like=on_like, on_add_playlist=on_add)
     st.caption(f'{idx + 1} of {len(st.session_state.playground_recs)}')

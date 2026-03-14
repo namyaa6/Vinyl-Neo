@@ -61,52 +61,62 @@ if st.session_state.get('search_box', '') == '':
         st.session_state.search_query = None
 
 
-def get_hybrid_recommendations(track_name, artist_name, track_id, df, feature_matrix, n_local=10, n_spotify=10):
-    """Combine local ML recommendations with Spotify similar tracks."""
-    recommendations = []
-
-    # 1. Local content-based
-    matches = df[df['track_name'].str.contains(track_name, case=False, na=False)]
-    if len(matches) == 0:
-        matches = df[df['artists'].str.contains(artist_name, case=False, na=False)]
-    if len(matches) > 0:
-        song_idx = matches.index[0]
-        song_features = feature_matrix[song_idx].reshape(1, -1)
-        similarities = cosine_similarity(song_features, feature_matrix)[0]
-        similar_indices = similarities.argsort()[::-1][1:n_local + 1]
-        for idx in similar_indices:
-            row = df.iloc[idx]
-            recommendations.append({
-                'track_name': row['track_name'],
-                'artist': row['artists'],
-                'genre': row['track_genre'],
-                'source': 'local_ml',
-                'score': float(similarities[idx]),
-                'track_id': row.get('track_id'),
-                'features': {c: row.get(c, 0) for c in feature_cols if c in row},
-            })
-
-    # 2. Spotify
+def get_spotify_recommendations(track_id, n=20):
+    """Get recommendations directly from Spotify (familiar, popular tracks)."""
+    if not track_id:
+        return []
     try:
         from services.spotify_service import SpotifyService
         spotify = SpotifyService()
-        if track_id and spotify._client_id:
-            spotify_tracks = spotify.get_recommendations_by_tracks([str(track_id)], limit=n_spotify)
-            for track in spotify_tracks:
-                sim = SpotifyService.simplify_track(track)
-                recommendations.append({
-                    'track_name': sim['name'],
-                    'artist': sim['artist'],
-                    'genre': '',
-                    'source': 'spotify',
-                    'score': 0.8,
-                    'track_id': sim.get('spotify_id'),
-                    'preview_url': sim.get('preview_url'),
-                    'image_url': sim.get('image_url'),
-                    'external_url': sim.get('external_url'),
-                })
+        if not spotify._client_id:
+            return []
+        tracks = spotify.get_recommendations_by_tracks([str(track_id)], limit=n)
+        recs = []
+        for track in tracks:
+            sim = SpotifyService.simplify_track(track)
+            recs.append({
+                'track_name': sim['name'],
+                'artist': sim['artist'],
+                'genre': '',
+                'source': 'spotify',
+                'track_id': sim.get('spotify_id'),
+                'preview_url': sim.get('preview_url'),
+                'image_url': sim.get('image_url'),
+                'external_url': sim.get('external_url'),
+            })
+        return recs
     except Exception:
-        pass
+        return []
+
+
+def get_hybrid_recommendations(track_name, artist_name, track_id, df, feature_matrix, n_local=5, n_spotify=20):
+    """Spotify-first: use Spotify recs when available; local CSV only as fallback."""
+    recommendations = []
+
+    # 1. Spotify first (recommended - familiar tracks)
+    if track_id:
+        spotify_recs = get_spotify_recommendations(track_id, n_spotify)
+        recommendations.extend(spotify_recs)
+
+    # 2. Add local only if we have few Spotify recs (fallback)
+    if len(recommendations) < 5:
+        matches = df[df['track_name'].str.contains(track_name, case=False, na=False)]
+        if len(matches) == 0:
+            matches = df[df['artists'].str.contains(artist_name, case=False, na=False)]
+        if len(matches) > 0:
+            song_idx = matches.index[0]
+            song_features = feature_matrix[song_idx].reshape(1, -1)
+            similarities = cosine_similarity(song_features, feature_matrix)[0]
+            for idx in similarities.argsort()[::-1][1:n_local + 1]:
+                row = df.iloc[idx]
+                recommendations.append({
+                    'track_name': row['track_name'],
+                    'artist': row['artists'],
+                    'genre': row['track_genre'],
+                    'source': 'local_ml',
+                    'track_id': row.get('track_id'),
+                    'features': {c: row.get(c, 0) for c in feature_cols if c in row},
+                })
 
     return recommendations
 
@@ -218,29 +228,34 @@ if st.button('SEARCH', use_container_width=True, key='search_btn'):
             track_id = None
             row = None
 
-            # 1. Try local CSV first
-            matches = df[df['track_name'].str.contains(search_query, case=False, na=False)]
-            if len(matches) == 0:
-                matches = df[df['artists'].str.contains(search_query, case=False, na=False)]
-            if len(matches) > 0:
-                row = matches.iloc[0]
-                track_name = row['track_name']
-                artist_name = row['artists']
-                track_id = str(row.get('track_id', '')) if pd.notna(row.get('track_id')) else None
-
-            # 2. If not in CSV, try Spotify search (e.g. "Ordinary by Alex Warren")
+            # 1. Try Spotify search FIRST (any song on Spotify will be found)
             spotify_result = None
             spotify_error = None
-            if track_name is None:
-                try:
-                    spotify_result = search_spotify_track(search_query)
-                except Exception as e:
-                    spotify_error = str(e)
-                if spotify_result:
-                    track_name = spotify_result['track_name']
-                    artist_name = spotify_result['artist']
-                    track_id = spotify_result.get('track_id')
-                    row = None  # No CSV row for features
+            try:
+                spotify_result = search_spotify_track(search_query)
+            except Exception as e:
+                spotify_error = str(e)
+
+            if spotify_result:
+                track_name = spotify_result['track_name']
+                artist_name = spotify_result['artist']
+                track_id = spotify_result.get('track_id')
+                row = None
+            else:
+                # 2. Fallback: local CSV
+                matches = df[df['track_name'].str.contains(search_query, case=False, na=False)]
+                if len(matches) == 0:
+                    matches = df[df['artists'].str.contains(search_query, case=False, na=False)]
+                if len(matches) > 0:
+                    row = matches.iloc[0]
+                    track_name = row['track_name']
+                    artist_name = row['artists']
+                    track_id = str(row.get('track_id', '')) if pd.notna(row.get('track_id')) else None
+                else:
+                    row = None
+                    track_name = None
+                    artist_name = None
+                    track_id = None
 
             if track_name is not None and artist_name is not None:
                 st.session_state.search_query = search_query
@@ -332,7 +347,14 @@ if all_recs and st.session_state.seed_track:
         if seed.get('preview_url'):
             st.audio(seed['preview_url'])
         if seed.get('external_url'):
-            st.link_button('Open in Spotify', url=seed['external_url'], type='secondary')
+            url = str(seed['external_url']).strip()
+            if url.startswith("http"):
+                st.markdown(
+                    f'<a href="{url}" target="_blank" rel="noopener" '
+                    'style="display:inline-block;padding:0.5rem 1rem;background:#2c1810;color:#c4a574;'
+                    'border:1px solid #4a3728;border-radius:8px;text-decoration:none;">Open in Spotify</a>',
+                    unsafe_allow_html=True,
+                )
 
     with col_right:
         def on_prev():

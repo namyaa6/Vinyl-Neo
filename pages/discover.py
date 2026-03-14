@@ -57,31 +57,14 @@ if 'custom_playlists' not in st.session_state:
 
 
 def get_genre_recommendations(genre_key):
-    """Unified recs: local ML rows as dicts + Spotify recs. Returns list of rec dicts."""
+    """Spotify-first: genre recs from Spotify (familiar tracks). Local CSV only as fallback."""
     recs = []
-    genre_songs = df[df['track_genre'].str.contains(genre_key, case=False, na=False)]
-    if len(genre_songs) > 0:
-        sample_idx = genre_songs.sample(1).index[0]
-        song_features = feature_matrix[sample_idx].reshape(1, -1)
-        similarities = cosine_similarity(song_features, feature_matrix)[0]
-        for idx in similarities.argsort()[::-1]:
-            row = df.iloc[idx]
-            if genre_key.lower() in str(row['track_genre']).lower():
-                recs.append({
-                    'track_name': row['track_name'],
-                    'artist': row['artists'],
-                    'genre': row['track_genre'],
-                    'source': 'local_ml',
-                    'track_id': row.get('track_id'),
-                })
-                if len(recs) >= 15:
-                    break
     try:
         from services.spotify_service import SpotifyService
         spotify = SpotifyService()
         spotify_seed = GENRE_TO_SPOTIFY.get(genre_key, genre_key)
         if spotify._client_id:
-            tracks = spotify.get_recommendations_by_genres([spotify_seed], limit=15)
+            tracks = spotify.get_recommendations_by_genres([spotify_seed], limit=18)
             for t in tracks:
                 sim = SpotifyService.simplify_track(t)
                 recs.append({
@@ -95,26 +78,63 @@ def get_genre_recommendations(genre_key):
                 })
     except Exception:
         pass
+    if len(recs) < 5:
+        genre_songs = df[df['track_genre'].str.contains(genre_key, case=False, na=False)]
+        if len(genre_songs) > 0:
+            sample_idx = genre_songs.sample(1).index[0]
+            song_features = feature_matrix[sample_idx].reshape(1, -1)
+            similarities = cosine_similarity(song_features, feature_matrix)[0]
+            for idx in similarities.argsort()[::-1]:
+                row = df.iloc[idx]
+                if genre_key.lower() in str(row['track_genre']).lower():
+                    recs.append({
+                        'track_name': row['track_name'],
+                        'artist': row['artists'],
+                        'genre': row['track_genre'],
+                        'source': 'local_ml',
+                        'track_id': row.get('track_id'),
+                    })
+                    if len(recs) >= 15:
+                        break
     return recs
 
 
 def load_crate(crate_def):
-    """Load themed crate tracks from dataset."""
-    subset = df[df['track_genre'].str.contains(crate_def.get('genre_contains', ''), case=False, na=False)]
-    if 'max_energy' in crate_def:
-        subset = subset[subset['energy'] <= crate_def['max_energy']]
-    if len(subset) == 0:
-        return []
-    sample = subset.sample(min(20, len(subset)))
+    """Themed crate: try Spotify genre first, fallback to local dataset."""
+    genre = crate_def.get('genre_contains', '')
     recs = []
-    for _, row in sample.iterrows():
-        recs.append({
-            'track_name': row['track_name'],
-            'artist': row['artists'],
-            'genre': row['track_genre'],
-            'source': 'local_ml',
-            'track_id': row.get('track_id'),
-        })
+    try:
+        from services.spotify_service import SpotifyService
+        spotify = SpotifyService()
+        if spotify._client_id:
+            tracks = spotify.get_recommendations_by_genres([genre], limit=15)
+            for t in tracks:
+                sim = SpotifyService.simplify_track(t)
+                recs.append({
+                    'track_name': sim['name'],
+                    'artist': sim['artist'],
+                    'genre': genre,
+                    'source': 'spotify',
+                    'preview_url': sim.get('preview_url'),
+                    'image_url': sim.get('image_url'),
+                    'external_url': sim.get('external_url'),
+                })
+    except Exception:
+        pass
+    if len(recs) < 5:
+        subset = df[df['track_genre'].str.contains(genre, case=False, na=False)]
+        if 'max_energy' in crate_def:
+            subset = subset[subset['energy'] <= crate_def['max_energy']]
+        if len(subset) > 0:
+            sample = subset.sample(min(15, len(subset)))
+            for _, row in sample.iterrows():
+                recs.append({
+                    'track_name': row['track_name'],
+                    'artist': row['artists'],
+                    'genre': row['track_genre'],
+                    'source': 'local_ml',
+                    'track_id': row.get('track_id'),
+                })
     return recs
 
 
