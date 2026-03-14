@@ -18,10 +18,9 @@ if st.button('Back to menu', key='back_menu'):
 st.markdown('<h1 style="text-align: center; font-size: 2.5rem; color: #f5e6d3;">ABOUT VINYL NEO</h1>', unsafe_allow_html=True)
 st.markdown('<br>', unsafe_allow_html=True)
 
-col1, col2, col3 = st.columns([1, 2, 1])
-with col2:
-    st.markdown("### About Me")
+tab_about_me, tab_about_project = st.tabs(["About Me", "About This Project"])
 
+with tab_about_me:
     st.markdown("""
     I'm **Namya Jain**, a second-year BTech student in Artificial Intelligence and Machine Learning at Indira Gandhi Delhi Technical University for Women. A music enthusiast who loves to laugh through life while sipping tea.
 
@@ -36,10 +35,7 @@ with col2:
         unsafe_allow_html=True,
     )
 
-    st.markdown("---")
-
-    st.markdown("### About This Project")
-
+with tab_about_project:
     st.markdown("""
     **Vinyl Neo** is an AI-powered music discovery app that blends Spotify's catalog with local machine learning to surface familiar tracks and new favorites.
     """)
