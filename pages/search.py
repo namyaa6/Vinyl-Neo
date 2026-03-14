@@ -155,26 +155,27 @@ def enrich_local_rec_with_spotify(track_name, artist_name, track_id):
 
 
 def search_spotify_track(query):
-    """Search Spotify by query. Returns (track_name, artist, track_id, image_url, preview_url, external_url) or None."""
-    try:
-        from services.spotify_service import SpotifyService
-        spotify = SpotifyService()
-        if not spotify._client_id:
-            return None
-        items = spotify.search_track(query, limit=5)
-        if not items:
-            return None
-        sim = SpotifyService.simplify_track(items[0])
-        return {
-            'track_name': sim.get('name'),
-            'artist': sim.get('artist'),
-            'track_id': sim.get('spotify_id'),
-            'image_url': sim.get('image_url'),
-            'preview_url': sim.get('preview_url'),
-            'external_url': sim.get('external_url'),
-        }
-    except Exception:
+    """Search Spotify by query. Returns (track_name, artist, track_id, ...) or None. Raises on error for surfacing."""
+    from services.spotify_service import SpotifyService
+    spotify = SpotifyService()
+    if not spotify._client_id or not spotify._client_secret:
+        raise ValueError(
+            "Spotify credentials not found. "
+            "Locally: add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to .env. "
+            "On Streamlit Cloud: add them in Settings → Secrets (top-level keys, no spaces in values)."
+        )
+    items = spotify.search_track(query, limit=5)
+    if not items:
         return None
+    sim = SpotifyService.simplify_track(items[0])
+    return {
+        'track_name': sim.get('name'),
+        'artist': sim.get('artist'),
+        'track_id': sim.get('spotify_id'),
+        'image_url': sim.get('image_url'),
+        'preview_url': sim.get('preview_url'),
+        'external_url': sim.get('external_url'),
+    }
 
 
 # Inject rec-card styles (shared with assets/style.css)
@@ -229,8 +230,12 @@ if st.button('SEARCH', use_container_width=True, key='search_btn'):
 
             # 2. If not in CSV, try Spotify search (e.g. "Ordinary by Alex Warren")
             spotify_result = None
+            spotify_error = None
             if track_name is None:
-                spotify_result = search_spotify_track(search_query)
+                try:
+                    spotify_result = search_spotify_track(search_query)
+                except Exception as e:
+                    spotify_error = str(e)
                 if spotify_result:
                     track_name = spotify_result['track_name']
                     artist_name = spotify_result['artist']
@@ -281,7 +286,10 @@ if st.button('SEARCH', use_container_width=True, key='search_btn'):
                 }
                 st.rerun()
             else:
-                st.error('No results found. Try a different search or check that Spotify credentials are set.')
+                if spotify_error:
+                    st.error(spotify_error)
+                else:
+                    st.error('No results found. Try a different search.')
 
 # Results: left 40% = searched track, right 60% = current rec + actions + feature comparison
 all_recs = st.session_state.side_a if st.session_state.current_side == 'A' else st.session_state.side_b

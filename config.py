@@ -4,16 +4,27 @@ load_dotenv()
 
 
 def _get_spotify_creds(key: str) -> str:
-    """Read from st.secrets (Streamlit Cloud) or os.environ (local .env)."""
+    """Read from os.environ (.env) or st.secrets (Streamlit Cloud)."""
+    val = os.getenv(key, '').strip()
+    if val:
+        return val
     try:
         import streamlit as st
         if hasattr(st, 'secrets') and st.secrets:
-            val = st.secrets.get(key, '')
+            # Top-level keys: SPOTIFY_CLIENT_ID = "xxx"
+            val = st.secrets.get(key, '') or getattr(st.secrets, key, '')
             if val:
-                return str(val)
+                return str(val).strip()
+            # Section [spotify]: client_id / SPOTIFY_CLIENT_ID
+            sec = st.secrets.get('spotify') or getattr(st.secrets, 'spotify', None)
+            if sec:
+                alt = key.replace('SPOTIFY_', '').lower()  # client_id, client_secret
+                val = sec.get(key) or sec.get(alt) or getattr(sec, key, '') or getattr(sec, alt, '')
+                if val:
+                    return str(val).strip()
     except Exception:
         pass
-    return os.getenv(key, '')
+    return ''
 
 
 class Config:
