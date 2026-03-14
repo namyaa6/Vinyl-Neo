@@ -1,14 +1,11 @@
 """Playlists, Liked Songs, and Remix (crossfade-style)."""
 import streamlit as st
 
+from utils.user_data import ensure_user_session_loaded, save_user_data
+
 st.set_page_config(layout="wide", page_title="Playlists - Vinyl Neo")
 
-if 'custom_playlists' not in st.session_state:
-    st.session_state.custom_playlists = {}
-if 'liked_songs' not in st.session_state:
-    st.session_state.liked_songs = []
-if 'playlist_queue' not in st.session_state:
-    st.session_state.playlist_queue = []
+ensure_user_session_loaded(st.session_state)
 if 'remix_tracks' not in st.session_state:
     st.session_state.remix_tracks = []
 
@@ -59,10 +56,12 @@ with tab_playlists:
                     'tracks': list(st.session_state.playlist_queue),
                 }
                 st.session_state.playlist_queue = []
+                save_user_data(st.session_state.liked_songs, st.session_state.custom_playlists, st.session_state.playlist_queue)
                 st.success(f'Created playlist: {pl_name}')
                 st.rerun()
         if st.button('Clear queue', key='clear_queue'):
             st.session_state.playlist_queue = []
+            save_user_data(st.session_state.liked_songs, st.session_state.custom_playlists, st.session_state.playlist_queue)
             st.rerun()
     else:
         st.info('Add tracks from Search or Discover to build a playlist.')
@@ -84,6 +83,7 @@ with tab_playlists:
                         st.link_button('Open in Spotify', url=t['external_url'], type='secondary', key=f'pl_spot_{name}_{i}')
                 if st.button(f'Delete playlist: {name}', key=f'del_pl_{name}'):
                     del st.session_state.custom_playlists[name]
+                    save_user_data(st.session_state.liked_songs, st.session_state.custom_playlists, st.session_state.playlist_queue)
                     st.rerun()
     else:
         st.info('No playlists yet.')
@@ -102,6 +102,7 @@ with tab_liked:
                 st.link_button('Open in Spotify', url=song['external_url'], type='secondary', key=f'liked_spot_{i}')
             if st.button('Remove', key=f'del_liked_{i}'):
                 st.session_state.liked_songs.pop(i - 1)
+                save_user_data(st.session_state.liked_songs, st.session_state.custom_playlists, st.session_state.playlist_queue)
                 st.rerun()
     else:
         st.info('No liked songs yet. Like tracks from Search or Discover.')

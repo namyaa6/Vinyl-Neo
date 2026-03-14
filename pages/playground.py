@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 
 from utils.components import render_rec_card, enrich_rec_with_spotify
+from utils.user_data import ensure_user_session_loaded, save_user_data
 
 st.set_page_config(layout="wide", page_title="Playground - Vinyl Neo")
 
@@ -32,10 +33,7 @@ if 'pg_max_tempo' not in st.session_state:
     st.session_state.pg_max_tempo = 160.0
 if 'pg_genre' not in st.session_state:
     st.session_state.pg_genre = 'pop'
-if 'liked_songs' not in st.session_state:
-    st.session_state.liked_songs = []
-if 'playlist_queue' not in st.session_state:
-    st.session_state.playlist_queue = []
+ensure_user_session_loaded(st.session_state)
 
 st.markdown("""
 <style>
@@ -181,10 +179,12 @@ if st.session_state.playground_recs:
         }
         if song_data not in st.session_state.liked_songs:
             st.session_state.liked_songs.append(song_data)
+            save_user_data(st.session_state.liked_songs, st.session_state.custom_playlists, st.session_state.playlist_queue)
             st.success('Added to Liked Songs!')
 
     def on_add():
         st.session_state.playlist_queue.append(rec_to_show)
+        save_user_data(st.session_state.liked_songs, st.session_state.custom_playlists, st.session_state.playlist_queue)
         st.info('Added to playlist queue')
 
     col1, col2, col3 = st.columns([1, 2, 1])

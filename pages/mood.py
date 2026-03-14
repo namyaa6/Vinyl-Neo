@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 
 from utils.components import render_rec_card, enrich_rec_with_spotify
+from utils.user_data import ensure_user_session_loaded, save_user_data
 
 st.set_page_config(layout="wide", page_title="Mood - Vinyl Neo")
 
@@ -44,40 +45,23 @@ if 'mood_view' not in st.session_state:
     st.session_state.mood_view = 'moods'  # 'moods' | 'results'
 if 'current_mood' not in st.session_state:
     st.session_state.current_mood = None
-if 'liked_songs' not in st.session_state:
-    st.session_state.liked_songs = []
-if 'playlist_queue' not in st.session_state:
-    st.session_state.playlist_queue = []
+ensure_user_session_loaded(st.session_state)
 
 
 def get_mood_recs(mood, contrast_key):
+    """Spotify-first: genre-based recs from Spotify. Local CSV only as fallback."""
     base = MOOD_PROFILES.get(mood, MOOD_PROFILES['Chill']).copy()
     delta = CONTRAST_DELTAS.get(contrast_key, CONTRAST_DELTAS['neutral'])
     base['valence'] = min(1, max(0, base.get('valence', 0.5) + delta.get('valence_delta', 0)))
     base['energy'] = min(1, max(0, base.get('energy', 0.5) + delta.get('energy_delta', 0)))
-    df_copy = df.copy()
-    df_copy['score'] = 0.0
-    for k, v in base.items():
-        if k in df_copy.columns and k not in ('tempo', 'spotify_genre'):
-            df_copy['score'] += -(df_copy[k].fillna(0) - v) ** 2
-        elif k == 'tempo':
-            df_copy['score'] += -((df_copy['tempo'].fillna(100) - v) / 100) ** 2
-    recs = df_copy.nlargest(10, 'score').to_dict('records')
     out = []
-    for r in recs:
-        out.append({
-            'track_name': r.get('track_name'),
-            'artist': r.get('artists'),
-            'genre': r.get('track_genre', ''),
-            'track_id': r.get('track_id'),
-        })
-    # Add Spotify recs (album art, preview, external_url included)
+    # 1. Spotify first
     try:
         from services.spotify_service import SpotifyService
         spotify = SpotifyService()
         genre = base.get('spotify_genre', 'pop')
         if spotify._client_id:
-            tracks = spotify.get_recommendations_by_genres([genre], limit=8)
+            tracks = spotify.get_recommendations_by_genres([genre], limit=15)
             for t in tracks:
                 sim = SpotifyService.simplify_track(t)
                 out.append({
@@ -91,6 +75,22 @@ def get_mood_recs(mood, contrast_key):
                 })
     except Exception:
         pass
+    # 2. Local fallback if few Spotify recs
+    if len(out) < 5:
+        df_copy = df.copy()
+        df_copy['score'] = 0.0
+        for k, v in base.items():
+            if k in df_copy.columns and k not in ('tempo', 'spotify_genre'):
+                df_copy['score'] += -(df_copy[k].fillna(0) - v) ** 2
+            elif k == 'tempo':
+                df_copy['score'] += -((df_copy['tempo'].fillna(100) - v) / 100) ** 2
+        for r in df_copy.nlargest(10, 'score').to_dict('records'):
+            out.append({
+                'track_name': r.get('track_name'),
+                'artist': r.get('artists'),
+                'genre': r.get('track_genre', ''),
+                'track_id': r.get('track_id'),
+            })
     return out
 
 
@@ -151,6 +151,7 @@ if st.session_state.mood_view == 'results' and st.session_state.mood_recs:
         }
         if song_data not in st.session_state.liked_songs:
             st.session_state.liked_songs.append(song_data)
+            save_user_data(st.session_state.liked_songs, st.session_state.custom_playlists, st.session_state.playlist_queue)
             st.success('Added to Liked Songs!')
         st.session_state.mood_history.append({
             'timestamp': datetime.now().isoformat(),
@@ -160,6 +161,7 @@ if st.session_state.mood_view == 'results' and st.session_state.mood_recs:
 
     def on_add():
         st.session_state.playlist_queue.append(rec_to_show)
+        save_user_data(st.session_state.liked_songs, st.session_state.custom_playlists, st.session_state.playlist_queue)
         st.info('Added to playlist queue')
 
     col1, col2, col3 = st.columns([1, 2, 1])

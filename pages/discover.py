@@ -5,6 +5,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics.pairwise import cosine_similarity
 
 from utils.components import render_rec_card, enrich_rec_with_spotify
+from utils.user_data import ensure_user_session_loaded, save_user_data
 
 st.set_page_config(layout="wide", page_title="Discover - Vinyl Neo")
 
@@ -48,12 +49,7 @@ if 'discover_rec_index' not in st.session_state:
     st.session_state.discover_rec_index = 0
 if 'discover_selection_name' not in st.session_state:
     st.session_state.discover_selection_name = ''
-if 'liked_songs' not in st.session_state:
-    st.session_state.liked_songs = []
-if 'playlist_queue' not in st.session_state:
-    st.session_state.playlist_queue = []
-if 'custom_playlists' not in st.session_state:
-    st.session_state.custom_playlists = {}
+ensure_user_session_loaded(st.session_state)
 
 
 def get_genre_recommendations(genre_key):
@@ -211,10 +207,12 @@ if st.session_state.discover_view == 'results' and st.session_state.discover_rec
         }
         if song_data not in st.session_state.liked_songs:
             st.session_state.liked_songs.append(song_data)
+            save_user_data(st.session_state.liked_songs, st.session_state.custom_playlists, st.session_state.playlist_queue)
             st.success('Added to Liked Songs!')
 
     def on_add():
         st.session_state.playlist_queue.append(rec_to_show)
+        save_user_data(st.session_state.liked_songs, st.session_state.custom_playlists, st.session_state.playlist_queue)
         st.info('Added to playlist queue')
 
     col1, col2, col3 = st.columns([1, 2, 1])

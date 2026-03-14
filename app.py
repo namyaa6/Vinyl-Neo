@@ -3,6 +3,8 @@
 import streamlit as st
 import pandas as pd
 
+from utils.user_data import ensure_user_session_loaded
+
 st.set_page_config(
     page_title="Vinyl Neo",
     layout="wide",
@@ -17,6 +19,7 @@ df = load_data()
 
 if 'started' not in st.session_state:
     st.session_state.started = False
+ensure_user_session_loaded(st.session_state)
 
 st.markdown("""
 <style>

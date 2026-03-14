@@ -4,6 +4,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics.pairwise import cosine_similarity
 
 from utils.components import render_rec_card
+from utils.user_data import ensure_user_session_loaded, save_user_data
 
 st.set_page_config(layout="wide", page_title="Search - Vinyl Neo")
 
@@ -29,12 +30,7 @@ if 'current_rec_index' not in st.session_state:
     st.session_state.current_rec_index = 0
 if 'recommendations' not in st.session_state:
     st.session_state.recommendations = []
-if 'liked_songs' not in st.session_state:
-    st.session_state.liked_songs = []
-if 'custom_playlists' not in st.session_state:
-    st.session_state.custom_playlists = {}
-if 'playlist_queue' not in st.session_state:
-    st.session_state.playlist_queue = []
+ensure_user_session_loaded(st.session_state)
 if 'current_side' not in st.session_state:
     st.session_state.current_side = 'A'
 if 'side_a' not in st.session_state:
@@ -121,7 +117,8 @@ def get_hybrid_recommendations(track_name, artist_name, track_id, df, feature_ma
     return recommendations
 
 
-def split_sides(recs, n_per_side=6):
+def split_sides(recs, n_per_side=10):
+    """Side A = first N tracks (closest). Side B = next N (exploration)."""
     side_a = recs[:n_per_side]
     side_b = recs[n_per_side:n_per_side * 2] if len(recs) > n_per_side else []
     return side_a, side_b
@@ -377,10 +374,12 @@ if all_recs and st.session_state.seed_track:
             }
             if song_data not in st.session_state.liked_songs:
                 st.session_state.liked_songs.append(song_data)
+                save_user_data(st.session_state.liked_songs, st.session_state.custom_playlists, st.session_state.playlist_queue)
                 st.success('Added to Liked Songs!')
 
         def on_add():
             st.session_state.playlist_queue.append(rec_to_show)
+            save_user_data(st.session_state.liked_songs, st.session_state.custom_playlists, st.session_state.playlist_queue)
             st.info('Added to playlist queue')
 
         render_rec_card(
@@ -393,14 +392,19 @@ if all_recs and st.session_state.seed_track:
             on_add_playlist=on_add,
         )
 
-        # Side A / Side B toggle and caption
-        st.caption('Side A = tracks closest to your search. Side B = tracks that push boundaries.')
-        side_label = 'Side A: Similar' if st.session_state.current_side == 'A' else 'Side B: Explore'
-        if st.button(side_label, key='side_toggle'):
-            st.session_state.current_side = 'B' if st.session_state.current_side == 'A' else 'A'
-            st.session_state.recommendations = st.session_state.side_b if st.session_state.current_side == 'B' else st.session_state.side_a
-            st.session_state.current_rec_index = 0
-            st.rerun()
+        # Side A / Side B toggle - only show when Side B has tracks
+        side_a = st.session_state.side_a
+        side_b = st.session_state.side_b
+        st.caption('Side A = tracks closest to your search. Side B = exploration picks.')
+        if len(side_b) > 0:
+            side_label = 'Side A: Similar' if st.session_state.current_side == 'A' else 'Side B: Explore'
+            if st.button(side_label, key='side_toggle'):
+                st.session_state.current_side = 'B' if st.session_state.current_side == 'A' else 'A'
+                st.session_state.recommendations = side_b if st.session_state.current_side == 'B' else side_a
+                st.session_state.current_rec_index = 0
+                st.rerun()
+        elif len(side_a) > 0:
+            st.caption(f'Only {len(side_a)} recommendations — try another search for Side B.')
 
         # Feature comparison (one-line interpretation + chart)
         if rec_to_show.get('features') and st.session_state.get('seed_features'):
@@ -468,15 +472,18 @@ elif all_recs:
             }
             if song_data not in st.session_state.liked_songs:
                 st.session_state.liked_songs.append(song_data)
+                save_user_data(st.session_state.liked_songs, st.session_state.custom_playlists, st.session_state.playlist_queue)
                 st.success('Added to Liked Songs!')
         def on_add():
             st.session_state.playlist_queue.append(rec_to_show)
+            save_user_data(st.session_state.liked_songs, st.session_state.custom_playlists, st.session_state.playlist_queue)
             st.info('Added to playlist queue')
         render_rec_card(rec_to_show, key_prefix='search_rec', show_actions=True,
                         on_prev=on_prev, on_next=on_next, on_like=on_like, on_add_playlist=on_add)
-        side_label = 'Side A: Similar' if st.session_state.current_side == 'A' else 'Side B: Explore'
-        if st.button(side_label, key='side_toggle'):
-            st.session_state.current_side = 'B' if st.session_state.current_side == 'A' else 'A'
-            st.session_state.recommendations = st.session_state.side_b if st.session_state.current_side == 'B' else st.session_state.side_a
-            st.session_state.current_rec_index = 0
-            st.rerun()
+        if len(st.session_state.side_b) > 0:
+            side_label = 'Side A: Similar' if st.session_state.current_side == 'A' else 'Side B: Explore'
+            if st.button(side_label, key='side_toggle'):
+                st.session_state.current_side = 'B' if st.session_state.current_side == 'A' else 'A'
+                st.session_state.recommendations = st.session_state.side_b if st.session_state.current_side == 'B' else st.session_state.side_a
+                st.session_state.current_rec_index = 0
+                st.rerun()
